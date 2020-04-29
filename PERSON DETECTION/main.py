@@ -46,10 +46,8 @@ class Network:
         self.exec_network = self.plugin.load_network(self.network, device)
 
         # Get the input layer
-        self.input_blob = next(iter(self.network.inputs))
-        print(type(self.input_blob))
+        #self.input_blob = next(iter(self.network.inputs))
         self.input_blob = "image_tensor"
-        print(type(self.input_blob))
         self.output_blob = next(iter(self.network.outputs))
 
         return
@@ -121,14 +119,20 @@ def draw_boxes(frame, result, args, width, height):
     for box in result[0][0]: # Output shape is 1x1x100x7
         conf = box[2]
         obj = box[1] # OBJECT = 1 ie. person ( for coco dataset)
+        font = cv2.FONT_HERSHEY_COMPLEX_SMALL
         #if conf >= 0.5:
-        if conf >= 0.4 and obj == 1:
+        if conf >= 0.3 and obj == 1:
             counter += 1
             xmin = int(box[3] * width)
             ymin = int(box[4] * height)
             xmax = int(box[5] * width)
             ymax = int(box[6] * height)
             cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
+            
+            conf = conf * 100
+            conf = "{:.2f}".format(conf)
+            frame = cv2.putText(frame, str(conf)+"%", (xmin, ymax), font,  0.6, (0, 255, 0), 1, cv2.LINE_AA)
+        frame = cv2.putText(frame, "No of PEOPLE = "+str(counter), (5, 15), font,  0.8, (0, 255, 0), 1, cv2.LINE_AA)
     return frame
 
 
@@ -180,7 +184,7 @@ def infer_on_video(args):
                 # Write out the frame
             out.write(frame)
 
-            cv2.imshow("DETECT{}".format(counter),frame)
+            cv2.imshow("PEOPLE COUNTER",frame)
 
         # Break if escape key pressed
         if key_pressed == 27:
