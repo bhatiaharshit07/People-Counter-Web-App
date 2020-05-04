@@ -31,7 +31,7 @@ import logging as log
 import paho.mqtt.client as mqtt
 from random import randint
 from argparse import ArgumentParser
-from inference import Network
+from inference_v1 import Network
 
 CLASSES = ['person']
 CPU_EXTENSION = "/opt/intel/openvino/deployment_tools/inference_engine/lib/intel64/libcpu_extension_sse4.so"
@@ -86,6 +86,24 @@ def get_class_names(class_nums):
         class_names.append(CLASSES[int(i)])
     return class_names
 
+def draw_boxes(frame, result, args, width, height):
+    '''
+    Draw bounding boxes onto the frame.
+    '''
+    
+    for box in result[0][0]: # Output shape is 1x1x100x7
+        conf = box[2]
+        obj = box[1] # OBJECT = 1 ie. person ( for coco dataset)
+        #if conf >= 0.5:
+        if conf >= 0.2 and obj == 1:
+            
+            xmin = int(box[3] * width)
+            ymin = int(box[4] * height)
+            xmax = int(box[5] * width)
+            ymax = int(box[6] * height)
+            cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
+    return frame
+
 def infer_on_stream(args, client):
     """
     Initialize the inference network, stream video to network,
@@ -96,17 +114,17 @@ def infer_on_stream(args, client):
     :return: None
     """
     # Initialise the class
-    infer_network = Network()
+    plugin = Network()
     # Set Probability threshold for detections
     prob_threshold = args.prob_threshold
 
     ### TODO: Load the model through `infer_network` ###
-    plugin.load_model(args.m, args.d, CPU_EXTENSION)
+    plugin.load_model(args.model, args.device, CPU_EXTENSION)
     net_input_shape = plugin.get_input_shape()
 
     ### TODO: Handle the input stream ###
-    cap = cv2.VideoCapture(args.i)
-    cap.open(args.i)
+    cap = cv2.VideoCapture(args.input)
+    cap.open(args.input)
     width = int(cap.get(3))
     height = int(cap.get(4))
 
@@ -131,21 +149,22 @@ def infer_on_stream(args, client):
         if plugin.wait() == 0:
 
             ### TODO: Get the results of the inference request ###
-            result = plugin.extract_output()
+            result = plugin.get_output()
 
             ### TODO: Extract any desired stats from the results ###
-            out_frame, classes = draw_masks(result, width, height)
+            out_frame = draw_boxes(p_frame, result, args, width, height)
 
             ### TODO: Calculate and send relevant information on ###
-            class_names = get_class_names(classes)
+            #class_names = get_class_names(classes)
             speed = randint(50,70)
-            client.publish("class", json.dumps({"class_names": class_names}))
+            #client.publish("class", json.dumps({"class_names": class_names}))
             client.publish("speedometer", json.dumps({"speed": speed}))
             ### current_count, total_count and duration to the MQTT server ###
             ### Topic "person": keys of "count" and "total" ###
             ### Topic "person/duration": key of "duration" ###
 
         ### TODO: Send the frame to the FFMPEG server ###
+        np.ascontiguousarray(out_frame, dtype=np.float32)
         sys.stdout.buffer.write(out_frame)
         sys.stdout.flush()
         if key_pressed == 27:

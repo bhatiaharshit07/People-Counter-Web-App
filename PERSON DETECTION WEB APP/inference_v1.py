@@ -43,7 +43,7 @@ class Network:
         self.exec_network = None
         self.infer_request = None
 
-    def load_model(self, model, device = "CPU", cpu_extension = None:)
+    def load_model(self, model, device = "CPU", cpu_extension = None):
         
         ### TODO: Load the model ###
         model_xml = model
@@ -53,23 +53,23 @@ class Network:
         self.plugin = IECore()
 
         # Add a CPU extension, if applicable
-        if cpu_extension and "CPU" in device:
-            self.plugin.add_extension(cpu_extension, device)
+        #if cpu_extension and "CPU" in device:
+            #self.plugin.add_extension(cpu_extension, device)
 
         # Read the IR as a IENetwork
         self.network = IENetwork(model=model_xml, weights=model_bin)
         
         # Load the IENetwork into the plugin
         self.exec_network = self.plugin.load_network(self.network, device)
-
+        '''
         ### TODO: Check for supported layers ###
-        supported_layers=plugin.query_network(network=net , device_name="CPU")
+        supported_layers=self.plugin.query_network(network=net , device_name="CPU")
         unsupported_layers=[l for l in net.layers.keys() if l not in supported_layers]
         if len(unsupported_layers) != 0:
             print("Unsupported layers found :{}".format(unsupported_layers))
         print("Check whether extensions are available to add to IECore.")
         exit(1)
-
+        '''
         # Get the input layer
         self.input_blob = "image_tensor"
         self.output_blob = next(iter(self.network.outputs))
@@ -80,7 +80,7 @@ class Network:
 
     def get_input_shape(self):
         ### TODO: Return the shape of the input layer ###
-        return self.network.input[self.input_blob].shape
+        return self.network.inputs[self.input_blob].shape
 
     def exec_net(self, image):
         ### TODO: Start an asynchronous request ###
