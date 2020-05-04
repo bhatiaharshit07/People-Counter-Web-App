@@ -90,7 +90,7 @@ def draw_boxes(frame, result, args, width, height):
     '''
     Draw bounding boxes onto the frame.
     '''
-    
+   
     for box in result[0][0]: # Output shape is 1x1x100x7
         conf = box[2]
         obj = box[1] # OBJECT = 1 ie. person ( for coco dataset)
@@ -101,7 +101,9 @@ def draw_boxes(frame, result, args, width, height):
             ymin = int(box[4] * height)
             xmax = int(box[5] * width)
             ymax = int(box[6] * height)
+            #new_frame = frame
             cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
+            frame = cv2.resize(frame, (768,432))
     return frame
 
 def infer_on_stream(args, client):
@@ -138,9 +140,15 @@ def infer_on_stream(args, client):
         key_pressed = cv2.waitKey(60)
 
         ### TODO: Pre-process the image as needed ###
-        p_frame = cv2.resize(frame, (net_input_shape[3], net_input_shape[2]))
+        
+        #p_frame = cv2.resize(frame, (net_input_shape[3], net_input_shape[2]))
+        p_frame = cv2.resize(frame, (300,300))
+        p_frame_1 = p_frame
         p_frame = p_frame.transpose((2,0,1))
         p_frame = p_frame.reshape(1, *p_frame.shape)
+       
+        
+        
 
         ### TODO: Start asynchronous inference for specified request ###
         plugin.exec_net(p_frame)
@@ -150,21 +158,28 @@ def infer_on_stream(args, client):
 
             ### TODO: Get the results of the inference request ###
             result = plugin.get_output()
-
+            
+            
             ### TODO: Extract any desired stats from the results ###
-            out_frame = draw_boxes(p_frame, result, args, width, height)
+            out_frame = draw_boxes(p_frame_1, result, args, width, height)
+            #np.ascontiguousarray(out_frame, dtype=np.float32)
+            
+            #out_frame = cv2.resize(out_frame,(width,height))
+            out_frame = out_frame.copy(order='C')
 
+            
             ### TODO: Calculate and send relevant information on ###
             #class_names = get_class_names(classes)
             speed = randint(50,70)
             #client.publish("class", json.dumps({"class_names": class_names}))
             client.publish("speedometer", json.dumps({"speed": speed}))
+            #client.publish("person", json.dumps({"count": count}))
             ### current_count, total_count and duration to the MQTT server ###
             ### Topic "person": keys of "count" and "total" ###
             ### Topic "person/duration": key of "duration" ###
 
         ### TODO: Send the frame to the FFMPEG server ###
-        np.ascontiguousarray(out_frame, dtype=np.float32)
+        
         sys.stdout.buffer.write(out_frame)
         sys.stdout.flush()
         if key_pressed == 27:

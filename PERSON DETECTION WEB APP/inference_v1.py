@@ -57,8 +57,8 @@ class Network:
             #self.plugin.add_extension(cpu_extension, device)
 
         # Read the IR as a IENetwork
-        self.network = IENetwork(model=model_xml, weights=model_bin)
-        
+        #self.network = IENetwork(model=model_xml, weights=model_bin)
+        self.network = self.plugin.read_network(model=model_xml, weights=model_bin)
         # Load the IENetwork into the plugin
         self.exec_network = self.plugin.load_network(self.network, device)
         '''
