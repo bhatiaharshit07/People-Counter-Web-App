@@ -158,7 +158,7 @@ def infer_on_video(args):
     # The second argument should be `cv2.VideoWriter_fourcc('M','J','P','G')`
     # on Mac, and `0x00000021` on Linux
     #out = cv2.VideoWriter('out_1.mp4', 0x7634706d, 30, (width,height))
-    fourcc = cv2.VideoWriter_fourcc(*'MPEG')
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter('out_Pedestrian_Detect(0.3)_2_1_1.mp4', fourcc, 30, (width,height))
     # Process frames until the video ends, or process is exited
     while cap.isOpened():

@@ -154,14 +154,14 @@ def infer_on_stream(args, client):
             client.publish("speedometer", json.dumps({"speed": speed}))
 
         ### TODO: Send the frame to the FFMPEG server ###
-        sys.stdout.buffer.write(out_frame)
-        sys.stdout.flush()
-        if key_pressed == 27:
+            sys.stdout.buffer.write(out_frame)
+            sys.stdout.flush()
+            if key_pressed == 27:
             break
-        cap.release()
-        cv2.destroyAllWindows()
+            cap.release()
+            cv2.destroyAllWindows()
         ### TODO: Disconnect from MQTT
-        client.disconnect()
+            client.disconnect()
 
         ### TODO: Write an output image if `single_image_mode` ###
 
