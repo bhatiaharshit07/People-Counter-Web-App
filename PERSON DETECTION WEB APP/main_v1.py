@@ -90,21 +90,21 @@ def draw_boxes(frame, result, args, width, height):
     '''
     Draw bounding boxes onto the frame.
     '''
-   
+    counter = 0
     for box in result[0][0]: # Output shape is 1x1x100x7
         conf = box[2]
         obj = box[1] # OBJECT = 1 ie. person ( for coco dataset)
         #if conf >= 0.5:
         if conf >= 0.2 and obj == 1:
-            
+            counter += 1
             xmin = int(box[3] * width)
             ymin = int(box[4] * height)
             xmax = int(box[5] * width)
             ymax = int(box[6] * height)
-            #new_frame = frame
-            cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
-            frame = cv2.resize(frame, (768,432))
-    return frame
+            cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 225, 0), 1)
+        #frame = cv2.putText(frame, "No of PEOPLE = "+str(counter), (5, 15), cv2.FONT_HERSHEY_COMPLEX_SMALL,  0.8, (0, 255, 0), 1, cv2.LINE_AA)
+        #frame = cv2.resize(frame, (width,height))
+    return frame,counter
 
 def infer_on_stream(args, client):
     """
@@ -129,7 +129,8 @@ def infer_on_stream(args, client):
     cap.open(args.input)
     width = int(cap.get(3))
     height = int(cap.get(4))
-
+    last_count= 0
+    total_count = 0
     ### TODO: Loop until stream is over ###
     while cap.isOpened():
 
@@ -141,8 +142,8 @@ def infer_on_stream(args, client):
 
         ### TODO: Pre-process the image as needed ###
         
-        #p_frame = cv2.resize(frame, (net_input_shape[3], net_input_shape[2]))
-        p_frame = cv2.resize(frame, (300,300))
+        p_frame = cv2.resize(frame, (net_input_shape[3], net_input_shape[2]))
+        #p_frame = cv2.resize(frame, (300,300))
         p_frame_1 = p_frame
         p_frame = p_frame.transpose((2,0,1))
         p_frame = p_frame.reshape(1, *p_frame.shape)
@@ -161,22 +162,40 @@ def infer_on_stream(args, client):
             
             
             ### TODO: Extract any desired stats from the results ###
-            out_frame = draw_boxes(p_frame_1, result, args, width, height)
+            #out_frame, count = draw_boxes(p_frame_1, result, args, width, height)
+            out_frame, current_count = draw_boxes(p_frame_1, result, args, net_input_shape[3], net_input_shape[2])
             #np.ascontiguousarray(out_frame, dtype=np.float32)
             
             #out_frame = cv2.resize(out_frame,(width,height))
             out_frame = out_frame.copy(order='C')
-
+            out_frame = cv2.resize(out_frame, (width,height))
+            out_frame = cv2.putText(out_frame, "No of PEOPLE = "+str(current_count), (5, 15), cv2.FONT_HERSHEY_COMPLEX_SMALL,  0.8, (0, 255, 0), 1, cv2.LINE_AA)
+            
             
             ### TODO: Calculate and send relevant information on ###
             #class_names = get_class_names(classes)
-            speed = randint(50,70)
+            #speed = randint(50,70)
             #client.publish("class", json.dumps({"class_names": class_names}))
-            client.publish("speedometer", json.dumps({"speed": speed}))
-            #client.publish("person", json.dumps({"count": count}))
+            #client.publish("speedometer", json.dumps({"speed": speed}))
+            #client.publish("person", json.dumps({"currentCount": count}))
+            #client.publish("person", json.dumps({"count": current_count, "total":1}))
             ### current_count, total_count and duration to the MQTT server ###
             ### Topic "person": keys of "count" and "total" ###
             ### Topic "person/duration": key of "duration" ###
+            # When new person enters the video
+            
+            if current_count > last_count:
+                start_time = time.time()
+                last_count +=1
+                total_count = total_count + current_count - last_count
+                client.publish("person", json.dumps({"total": total_count}))
+            # Person duration in the video is calculated
+            if current_count < last_count:
+                duration = int(time.time() - start_time)
+                # Publish messages to the MQTT server
+                client.publish("person/duration",json.dumps({"duration": duration}))
+            client.publish("person", json.dumps({"count": current_count, "total":total_count}))
+            last_count = current_count
 
         ### TODO: Send the frame to the FFMPEG server ###
         
@@ -187,7 +206,7 @@ def infer_on_stream(args, client):
 
         ### TODO: Write an output image if `single_image_mode` ###
 
-
+       
     # Release the capture and destroy any OpenCV windows
     cap.release()
     cv2.destroyAllWindows()
