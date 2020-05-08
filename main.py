@@ -66,25 +66,26 @@ def build_argparser():
                         "(0.5 by default)")
     return parser
 
-def extract_box(img, output, conf_level=0.35):
-    h = img.shape[0]
-    w = img.shape[1]
-    box = output[0,0,:,3:7] * np.array([w, h, w, h])
+def draw_box(img, output, conf_level=0.35):
+    height = img.shape[0]
+    width = img.shape[1]
+    box = output[0,0,:,3:7] * np.array([width, height, width, height])
     box = box.astype(np.int32)
-    cls = output[0,0,:,1]
+    Class = output[0,0,:,1]
     conf = output[0,0,:,2]
     count=0
-    p1 = None
-    p2 = None
+    top_left = None
+    bottom_right = None
     for i in range(len(box)):
-        label = LABELS[str(int(cls[i]))]
+        label = LABELS[str(int(Class[i]))]
         if (not label=='person') or conf[i]<conf_level:
             continue
-        p1 = (box[i][0], box[i][1])
-        p2 = (box[i][2], box[i][3])
-        cv2.rectangle(img, p1, p2, (0,255,0))
+
+        top_left = (box[i][0], box[i][1])
+        bottom_right = (box[i][2], box[i][3])
+        cv2.rectangle(img, top_left, bottom_right, (0,255,0))
         count+=1
-    return img, count, (p1,p2)
+    return img, count, (top_left,bottom_right)
 
 def connect_mqtt():
     ### TODO: Connect to the MQTT client ###
@@ -113,48 +114,45 @@ def infer_on_stream(args, client):
     prob_threshold = probThresh
 
     ### TODO: Load the model through `infer_network` ###
-    
-    if filePath.lower()=="cam":
+    if filePath.lower() == "cam":
         camera = cv2.VideoCapture(0)
     elif filePath.split(".")[-1].lower() in ['jpg', 'jpeg', 'png', 'bmp']:
         infer_network.load_model(modelPath, 1, deviceType, cpuExt)
         image_input_shape = infer_network.get_input_shape()
-        #print(image_input_shape)
         img = cv2.imread(filePath, cv2.IMREAD_COLOR)
         resized_frame = cv2.resize(img, (image_input_shape[3], image_input_shape[2]))
         frame_preproc = np.transpose(np.expand_dims(resized_frame.copy(), axis=0), (0,3,1,2))
         infer_network.exec_net(frame_preproc)
-        if infer_network.wait()==0:
+        if infer_network.wait() == 0:
             outputs = infer_network.get_output()
-            box_frame, count, bbox = extract_box(img, outputs, prob_threshold)
+            box_frame, count, bbox = draw_box(img, outputs, prob_threshold)
             cv2.putText(box_frame, "Count:"+str(count), (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
             cv2.imwrite('output.jpg', box_frame)
         return
     else:
         if not os.path.isfile(filePath):
-            #print(" Given input file is not present.")
             exit(1)
         camera = cv2.VideoCapture(filePath)
+
     ### TODO: Handle the input stream ###
-    
     client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
     if (camera.isOpened()== False): 
-        #print("Error opening video stream or file")
         exit(1)
-    cur_req_id=0
-    next_req_id=1
-    num_requests=2
+    cur_req_id = 0
+    next_req_id = 1
+    num_requests = 2
     infer_network.load_model(modelPath, num_requests, deviceType, cpuExt)
     image_input_shape = infer_network.get_input_shape()
-    #print(image_input_shape)
+    
     ret, frame = camera.read()
+    
     ### TODO: Loop until stream is over ###
-    total_count=0
-    pres_count = 0
-    prev_count=0
-    start_time=0 
-    no_bbox=0
-    duration=0
+    totalCount = 0
+    presentCount = 0
+    previousCount = 0
+    start_time = 0 
+    no_bbox = 0
+    duration = 0
     prev_bbox_x = 0
 
     while camera.isOpened():
@@ -164,43 +162,48 @@ def infer_on_stream(args, client):
         if not ret:
             break
         key = cv2.waitKey(60)
+        
         ### TODO: Pre-process the image as needed ###
         resized_frame = cv2.resize(next_frame.copy(), (image_input_shape[3], image_input_shape[2]))
         frame_preproc = np.transpose(np.expand_dims(resized_frame.copy(), axis=0), (0,3,1,2))
+        
         ### TODO: Start asynchronous inference for specified request ###
         infer_network.exec_net(frame_preproc.copy(), req_id=next_req_id)
+        
         ### TODO: Wait for the result ###
         if infer_network.wait(cur_req_id)==0:
+            
             ### TODO: Get the results of the inference request ###
             outputs = infer_network.get_output(cur_req_id)
+            
             ### TODO: Extract any desired stats from the results ###
-            frame, pres_count, bbox = extract_box(frame.copy(), outputs[0], prob_threshold)
+            frame, presentCount, box_coordinates = draw_box(frame.copy(), outputs[0], prob_threshold)
             box_w = frame.shape[1]
-            tl, br = bbox #top_left, bottom_right
+            top_left, bottom_right = box_coordinates
         
-            if pres_count>prev_count:
+            if presentCount>previousCount:
                 start_time = time.time()
-                total_count+=pres_count-prev_count
+                totalCount+=presentCount-previousCount
                 no_bbox=0
-                client.publish("person", json.dumps({"total":total_count}))
-            elif pres_count<prev_count:
+                client.publish("person", json.dumps({"total":totalCount}))
+            elif presentCount<previousCount:
                 if no_bbox<=20:
-                    pres_count=prev_count
+                    presentCount=previousCount
                     no_bbox+=1
                 elif prev_bbox_x<box_w-200:
-                    pres_count=prev_count
+                    presentCount=previousCount
                     no_bbox=0
                 else:
                     duration = int(time.time()-start_time)
                     client.publish("person/duration", json.dumps({"duration":duration}))
-            if not (tl==None and br==None):
-                prev_bbox_x=int((tl[0]+br[0])/2)
-            prev_count=pres_count
+            if not (top_left==None and bottom_right==None):
+                prev_bbox_x=int((top_left[0]+bottom_right[0])/2)
+            previousCount=presentCount
                     
-            client.publish("person", json.dumps({"count":pres_count}))
+            client.publish("person", json.dumps({"count":presentCount}))
             
             ### TODO: Calculate and send relevant information on ###
-            ### current_count, total_count and duration to the MQTT server ###
+            ### current_count, totalCount and duration to the MQTT server ###
             ### Topic "person": keys of "count" and "total" ###
             ### Topic "person/duration": key of "duration" ###
             
@@ -209,11 +212,13 @@ def infer_on_stream(args, client):
         ### TODO: Send the frame to the FFMPEG server ###
         sys.stdout.buffer.write(frame)
         sys.stdout.flush()
+        
         ### TODO: Write an output image if `single_image_mode` ###
         cur_req_id, next_req_id = next_req_id, cur_req_id
         frame = next_frame
         if key==27:
             break
+    
     #output_video.release()
     camera.release()
     client.disconnect()
@@ -226,8 +231,10 @@ def main():
     """
     # Grab command line args
     args = build_argparser().parse_args()
+    
     # Connect to the MQTT server
     client = connect_mqtt()
+    
     # Perform inference on the input stream
     infer_on_stream(args, client)
 
