@@ -9,6 +9,7 @@ COMMANDS    : tar -xvf ssd_mobilenet_v2_coco_2018_03_29.tar.gz
 
 ## Explaining Custom Layers
 
+Layers apart from the known list of layers come under custom layers. Incase we use custom layers in our project we have to add extensions to both the model optimizer as well as the inference engine so that it can be handled during the time we do inference by our model.
 My model involves dealing with no custom layers however there is support added to check if any layer is unsupported as custom layers behave differently which cant be handled by the toolkit yet.
 
 
